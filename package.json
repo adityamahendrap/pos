@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc --watch",
-    "dev": "nodemon ./dist/index.js"
+    "server": "nodemon ./dist/index.js"
   },
   "keywords": [],
   "author": "",

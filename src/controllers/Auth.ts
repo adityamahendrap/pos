@@ -7,7 +7,7 @@ import sendEmail from '../utils/sendEmail';
 import randomstring from 'randomstring';
 
 export default {
-  register: async (req: Request, res: Response, next: NextFunction) => {
+  register: async (req: Request, res: Response, next: NextFunction): Promise<Response> => {
     const { name, email, password, confirmPassword }: 
     { name: string, email: string, password: string, confirmPassword: string } = req.body;
     
@@ -17,19 +17,15 @@ export default {
     if(password !== confirmPassword) {
       return res.status(400).send({ message: "Password confirmation is not matched"})
     }
-    const hashedPassword = await argon2.hash(password);
+    const hashedPassword: string = await argon2.hash(password);
     
     try { 
       const newUser = await prisma.user.create({
-        data: {
-          name,
-          email,
-          password: hashedPassword
-        }
+        data: { name, email, password: hashedPassword }
       })
       
-      const verificationEndpoint = `${process.env.API_ENDPOINT}/api/auth/verify-email/${newUser.id}`
-      const emailSended = await sendEmail(email, "Email Verification", verificationEndpoint, res)
+      const verificationEndpoint: string = `${process.env.API_ENDPOINT}/api/auth/verify-email/${newUser.id}`
+      const emailSended: boolean = await sendEmail(email, "Email Verification", verificationEndpoint, res)
       if(emailSended) {
         console.log("Email sended");
         return res.status(201).send({ message: "User created. Verification sended, please check ypur email" })
@@ -40,7 +36,7 @@ export default {
             id: newUser.id
           }
         })
-        res.status(500).send({ message: "Failed sending email verification" })
+        return res.status(500).send({ message: "Failed sending email verification" })
       }
     } catch (err) {
       // if(err instanceof TypeError) {
@@ -57,6 +53,7 @@ export default {
 
   login: async (req: Request, res: Response, next: NextFunction) => {
     const { email, password }: { email: string, password: string } = req.body
+    
     if (!email || !password) {
         return res.status(400).send({ message: 'Please fill all fields' })
     }
@@ -69,11 +66,11 @@ export default {
       if (!user) {
           return res.status(400).send({ message: 'User does not exist' })
       }
-      const validPassword = await argon2.verify(user.password, password)
+      const validPassword: boolean = await argon2.verify(user.password, password)
       if (!validPassword) {
           return res.status(400).send({ message: 'Invalid password' })
       }
-      const token = await new jose.SignJWT({ userId: user.id }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime(process.env.JWT_EXPIRES_IN ?? '1h').sign(new TextEncoder().encode(process.env.JWT_SECRET))
+      const token: string = await new jose.SignJWT({ userId: user.id }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime(process.env.JWT_EXPIRES_IN ?? '1h').sign(new TextEncoder().encode(process.env.JWT_SECRET))
       return res.status(200).send({ token })
     } catch (err) {
       console.log(err);
@@ -110,7 +107,7 @@ export default {
       })
 
       console.log("User verified an email");
-      res.status(201).send({ message: "Email verified" })
+      return res.status(201).send({ message: "Email verified" })
     } catch (err) {
       console.log(err);
     }
@@ -125,16 +122,16 @@ export default {
       })
       if(!user) return res.status(404).send({ message: "Email not registered"})
 
-      const resetPassword = randomstring.generate()
+      const resetPassword: string = randomstring.generate()
       console.log(resetPassword);
-      const text = `Password has been reseted.\nYour new password: ${resetPassword}\nPlease remember to change this password. `
+      const text: string = `Password has been reseted.\nYour new password: ${resetPassword}\nPlease remember to change this password. `
       const emailSended = await sendEmail(email, "Reset Password", text, res)
       if(!emailSended) {
         console.log("Send email failed");
         res.status(500).send({ message: "Failed sending email reset password, please try again" })
       }
 
-      const hashedResetPassword = await argon2.hash(resetPassword)
+      const hashedResetPassword: string = await argon2.hash(resetPassword)
       await prisma.user.update({
         where: { email },
         data: { password: hashedResetPassword } 
@@ -154,18 +151,18 @@ export default {
     if(currentPassword === newPassword) {
       return res.status(400).send({ message: "The current password and the new password are still the same"})
     }
-
+    
     try {
       const user = await prisma.user.findUnique({
         where: { id },
       })
 
-      const validCurrentPassword = await argon2.verify(user.password, currentPassword)
+      const validCurrentPassword: boolean = await argon2.verify(user.password, currentPassword)
       if(!validCurrentPassword) {
         return res.status(400).send({ message: "Invalid current password" })
       }
 
-      const hashedNewPassword = await argon2.hash(newPassword);
+      const hashedNewPassword: string = await argon2.hash(newPassword);
       await prisma.user.update({
         where: { id },
         data: { password: hashedNewPassword }
