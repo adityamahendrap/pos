@@ -1,15 +1,26 @@
 import { Request, Response, NextFunction } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
+import logger from '../utils/logger';
+import pagination from '../utils/pagination';
 const prisma = new PrismaClient();
 
 export default {
   fetch: async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const products = await prisma.product.findMany({})
-      const count: number = products.length
+    const { name, limit, skip } = req.query
 
-      console.log("User accessed products");
-      return res.status(200).send({ message: "Products retrieved successfully", count, data: products})
+    try {
+      let products = await prisma.product.findMany({
+        where: { name: name as string },
+        select: selectFetch,
+        ...pagination.prisma(limit as string, skip as string)
+      })
+      const data = {
+        ...pagination.meta(products.length, limit as string, skip as string),
+        products
+      }
+      
+      logger.info("User accessed products");
+      return res.status(200).send({ message: "Products retrieved successfully", data})
     } catch (err) {
       console.log(err);
     }
@@ -20,12 +31,14 @@ export default {
     
     try {
       const product = await prisma.product.findUnique({
-        where: { id }
+        where: { id },
+        select: selectDetail
       })
       if(!product) {
         return res.status(404).send({ message: 'Product not found' })
       }
-      console.log("User accessed product");
+
+      logger.info("User accessed product");
       return res.status(200).send({ message: "product retrieved successfully", data: product})
     } catch (err) {
       console.log(err);
@@ -40,7 +53,7 @@ export default {
         data: { sku, name, stock, price, categoryId, image }
       })
 
-      console.log('User created a product');
+      logger.info('User created a product');
       return res.status(201).send({ message: "product created"})
     } catch (err) {
       console.log(err);
@@ -57,7 +70,7 @@ export default {
         data: { sku, name, stock, price, categoryId, image }
       })
 
-      console.log("User updated product");
+      logger.info("User updated product");
       return res.status(201).send({ message: "product updated successfully" })
     } catch (err) {
       if(err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -73,10 +86,9 @@ export default {
     const { id } = req.params
 
     try {
-      await prisma.product.delete({
-        where: { id }
-      })
-      console.log("User deleted product");
+      await prisma.product.delete({ where: { id } })
+
+      logger.info("User deleted product");
       return res.status(200).send({ message: "product deleted successfully" })
     } catch (err) {
       if(err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -88,7 +100,39 @@ export default {
         }
       }
       console.log(err);
-      res.send(err)
     }
   }
+}
+
+const selectFetch = {
+  id: true,
+  sku: true,
+  name: true,
+  stock: true,
+  price: true,
+  image: true,
+  category: {
+    select: { 
+      id: true,
+      name: true,
+    },
+  },
+  createdAt: true,
+  updatedAt: true
+}
+
+const selectDetail = {
+  id: true,
+  sku: true,
+  name: true,
+  stock: true,
+  price: true,
+  image: true,
+  category: {
+    select: { id: true,
+      name: true,
+    },
+  },
+  createdAt: true,
+  updatedAt: true
 }

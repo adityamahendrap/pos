@@ -5,7 +5,7 @@ export default interface IOrder {
   // totalPrice: number,
   totalPaid: number,
   // totalReturn: number,
-  receiptCode: string,
+  // receiptCode: string,
   products: {
     productId: string;
     quantity: number;

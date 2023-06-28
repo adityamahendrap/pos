@@ -1,15 +1,24 @@
 import { Request, Response, NextFunction } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
+import logger from '../utils/logger';
+import pagination from '../utils/pagination';
 const prisma = new PrismaClient();
 
 export default {
   fetch: async (req: Request, res: Response, next: NextFunction) => {
+    const { limit, skip } = req.query
+    
     try {
-      const payments = await prisma.payment.findMany({})
-      const count: number = payments.length
+      const payments = await prisma.payment.findMany({
+        ...pagination.prisma(limit as string, skip as string)
+      })
+      const data = {
+        ...pagination.meta(payments.length, limit as string, skip as string),
+        payments
+      }
 
-      console.log("User accessed payments");
-      return res.status(200).send({ message: "Payments retrieved successfully", count, data: payments})
+      logger.info("User accessed payments");
+      return res.status(200).send({ message: "Payments retrieved successfully", data})
     } catch (err) {
       console.log(err);
     }
@@ -19,13 +28,12 @@ export default {
     const { id } = req.params
     
     try {
-      const payment = await prisma.payment.findUnique({
-        where: { id }
-      })
+      const payment = await prisma.payment.findUnique({ where: { id } })
       if(!payment) {
         return res.status(404).send('Payment not found')
       }
-      console.log("User accessed payment");
+
+      logger.info("User accessed payment");
       return res.status(200).send({ message: "Payment retrieved successfully", data: payment})
     } catch (err) {
       console.log(err);
@@ -33,14 +41,14 @@ export default {
   },
 
   create: async (req: Request, res: Response, next: NextFunction) => {
-    const { name, type, logo }: { name: string, type: any, logo: string } = req.body
+    const { name, type, logo } = req.body
 
     try {
       await prisma.payment.create({
         data: { name, type, logo }
       })
 
-      console.log('User created a payment');
+      logger.info('User created a payment');
       return res.status(201).send({ message: "Payment created"})
     } catch (err) {
       console.log(err);
@@ -48,7 +56,7 @@ export default {
   },
 
   update: async (req: Request, res: Response, next: NextFunction) => {
-    const { name, type, logo }: { name: string, type: any, logo: string } = req.body
+    const { name, type, logo } = req.body
     const { id } = req.params
     
     try {
@@ -57,7 +65,7 @@ export default {
         data: { name, type, logo }
       })
 
-      console.log("User updated payment");
+      logger.info("User updated payment");
       return res.status(201).send({ message: "Payment updated successfully" })
     } catch (err) {
       if(err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -73,10 +81,9 @@ export default {
     const { id } = req.params
 
     try {
-      await prisma.payment.delete({
-        where: { id }
-      })
-      console.log("User deleted payment");
+      await prisma.payment.delete({ where: { id } })
+
+      logger.info("User deleted payment");
       return res.status(200).send({ message: "Payment deleted successfully" })
     } catch (err) {
       if(err instanceof Prisma.PrismaClientKnownRequestError) {

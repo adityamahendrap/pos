@@ -27,9 +27,9 @@ model Order {
   userId         String
   paymentId      String
   name           String
-  totalPrice     Int            
-  totalPaid      Int            
-  totalReturn    Int            
+  totalPrice     Int
+  totalPaid      Int
+  totalReturn    Int
   receiptCode    String         @default(uuid())
   OrdersProducts OrderProduct[]
   createdAt      DateTime       @default(now())
@@ -64,7 +64,7 @@ model Payment {
   id        String      @id @default(uuid())
   name      String
   type      PaymentType
-  logo      String
+  logo      String?
   orders    Order[]
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt

@@ -1,11 +1,16 @@
-import { Router } from 'express';
-const router = Router()
-import productController from '../controllers/Product';
+import { Router } from "express";
+import productController from "../controllers/Product";
+import verifyUser from "../middlewares/verifyUser";
+import isAdmin from "../middlewares/isAdmin";
+const router = Router();
 
-router.get('/', productController.fetch) ///products?limit=10&skip=0
-router.get('/:id', productController.detail)
-router.post('/', productController.create)
-router.put('/:id', productController.update)
-router.delete('/:id', productController.delete)
+router.use(verifyUser);
+router.get("/", productController.fetch); ///products?limit=10&skip=0
+router.get("/:id", productController.detail);
 
-export default router
+router.use(isAdmin);
+router.post("/", productController.create);
+router.put("/:id", productController.update);
+router.delete("/:id", productController.delete);
+
+export default router;

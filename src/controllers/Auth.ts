@@ -2,14 +2,14 @@ import { Request, Response, NextFunction } from "express";
 import * as jose from "jose";
 import * as argon2 from "argon2";
 import { PrismaClient, Prisma } from "@prisma/client";
-const prisma = new PrismaClient();
 import sendEmail from '../utils/sendEmail';
 import randomstring from 'randomstring';
+import logger from '../utils/logger';
+const prisma = new PrismaClient();
 
 export default {
-  register: async (req: Request, res: Response, next: NextFunction): Promise<Response> => {
-    const { name, email, password, confirmPassword }: 
-    { name: string, email: string, password: string, confirmPassword: string } = req.body;
+  register: async (req: Request, res: Response, next: NextFunction) => {
+    const { name, email, password, confirmPassword }= req.body;
     
     if (!name || !email || !password || !confirmPassword) {
       return res.status(400).send({ message: "Please fill all fields" });
@@ -26,43 +26,32 @@ export default {
       
       const verificationEndpoint: string = `${process.env.API_ENDPOINT}/api/auth/verify-email/${newUser.id}`
       const emailSended: boolean = await sendEmail(email, "Email Verification", verificationEndpoint, res)
-      if(emailSended) {
-        console.log("Email sended");
-        return res.status(201).send({ message: "User created. Verification sended, please check ypur email" })
-      } else {
-        console.log("Send email failed");
-        await prisma.user.delete({
-          where: {
-            id: newUser.id
-          }
-        })
+      if(!emailSended) {
+        logger.info("Send email failed");
+        await prisma.user.delete({ where: { id: newUser.id } })
         return res.status(500).send({ message: "Failed sending email verification" })
       }
+
+      logger.info("Email sended");
+      return res.status(201).send({ message: "User created. Verification sended, please check ypur email" })
     } catch (err) {
-      // if(err instanceof TypeError) {
-      //   res.status(400).send(err)
-      // }
       if(err instanceof Prisma.PrismaClientKnownRequestError) {
-        if(err.meta.target === "User_email_key") {
+        if(err.meta?.target === "User_email_key") {
           return res.status(409).send({ message: "Email already registered" })
         }
       }
-      console.log(err);
+      next(err)
     }
   },
 
   login: async (req: Request, res: Response, next: NextFunction) => {
-    const { email, password }: { email: string, password: string } = req.body
+    const { email, password } = req.body
     
     if (!email || !password) {
         return res.status(400).send({ message: 'Please fill all fields' })
     }
     try {
-      const user = await prisma.user.findFirst({
-        where: {
-          email
-        }
-      })
+      const user = await prisma.user.findFirst({ where: { email } })
       if (!user) {
           return res.status(400).send({ message: 'User does not exist' })
       }
@@ -73,7 +62,7 @@ export default {
       const token: string = await new jose.SignJWT({ userId: user.id }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime(process.env.JWT_EXPIRES_IN ?? '1h').sign(new TextEncoder().encode(process.env.JWT_SECRET))
       return res.status(200).send({ token })
     } catch (err) {
-      console.log(err);
+      next(err)
     }
   },
 
@@ -83,22 +72,24 @@ export default {
         return res.status(400).send({ message: 'Token not found' })
     }
     try {
-        const { payload } = await jose.jwtVerify(token, new TextEncoder().encode(process.env.JWT_SECRET))
-        const user = await prisma.user.findFirst({
-          where: { id: payload.userId },
-          select: { email: true }
-        });
-        if (!user) {
-          return res.status(400).send({ message: 'Invalid token' })
-        }
-        return res.status(200).send(user)
+      const { payload } = await jose.jwtVerify(token, new TextEncoder().encode(process.env.JWT_SECRET))
+      const user = await prisma.user.findFirst({
+        where: { id: payload.userId as string },
+        select: { email: true }
+      });
+      if (!user) {
+        return res.status(400).send({ message: 'Invalid token' })
+      }
+
+      logger.info("User get verify token");
+      return res.status(200).send(user)
     } catch (err) {
-      console.log(err);
+      next(err)
     }
   },
 
   verifyEmail: async (req: Request, res: Response, next: NextFunction) => {
-    const { id }: { id?: string } = req.params
+    const { id } = req.params
 
     try {
       await prisma.user.update({
@@ -106,15 +97,15 @@ export default {
         data: { isVerify: true }
       })
 
-      console.log("User verified an email");
+      logger.info("User verified an email");
       return res.status(201).send({ message: "Email verified" })
     } catch (err) {
-      console.log(err);
+      next(err)
     }
   },
 
   forgotPassword: async (req: Request, res: Response, next: NextFunction) => {
-    const { email }: { email: string } = req.body
+    const { email } = req.body
 
     try {
       const user = await prisma.user.findUnique({
@@ -123,11 +114,10 @@ export default {
       if(!user) return res.status(404).send({ message: "Email not registered"})
 
       const resetPassword: string = randomstring.generate()
-      console.log(resetPassword);
       const text: string = `Password has been reseted.\nYour new password: ${resetPassword}\nPlease remember to change this password. `
-      const emailSended = await sendEmail(email, "Reset Password", text, res)
+      const emailSended: boolean = await sendEmail(email, "Reset Password", text, res)
       if(!emailSended) {
-        console.log("Send email failed");
+        logger.info("Send email failed");
         res.status(500).send({ message: "Failed sending email reset password, please try again" })
       }
 
@@ -137,10 +127,10 @@ export default {
         data: { password: hashedResetPassword } 
       })
 
-      console.log("User reseted the password");
+      logger.info("User reseted the password");
       return res.status(201).send({ message: "Password reseted, please check your email" })
     } catch (err) {
-      console.log(err);
+      next(err)
     }
   },
 
@@ -153,9 +143,10 @@ export default {
     }
     
     try {
-      const user = await prisma.user.findUnique({
-        where: { id },
-      })
+      const user = await prisma.user.findUnique({ where: { id } })
+      if(!user) {
+        return res.status(404).send({ message: "User not found" })
+      }
 
       const validCurrentPassword: boolean = await argon2.verify(user.password, currentPassword)
       if(!validCurrentPassword) {
@@ -168,10 +159,10 @@ export default {
         data: { password: hashedNewPassword }
       })
 
-      console.log("User changed password");
+      logger.info("User changed password");
       res.status(201).send({ message: "Password updated"})
     } catch (err) {
-      console.log(err);
+      next(err)
     }
   },
 };

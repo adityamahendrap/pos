@@ -1,13 +1,15 @@
-import { Router } from 'express';
-import authController from '../controllers/Auth';
+import { Router } from "express";
+import authController from "../controllers/Auth";
+import verifyUser from "../middlewares/verifyUser";
+const router = Router();
 
-const router = Router()
+router.post("/login", authController.login);
+router.post("/register", authController.register);
+router.post("/verify-token", authController.verifyToken);
+router.get("/verify-email/:id", authController.verifyEmail);
 
-router.post('/login', authController.login)
-router.post('/register', authController.register)
-router.post('/verify-token', authController.verifyToken)
-router.get('/verify-email/:id', authController.verifyEmail)
-router.put('/change-password', authController.changePassword)
-router.put('/forgot-password', authController.forgotPassword)
+router.use(verifyUser);
+router.put("/change-password", authController.changePassword);
+router.put("/forgot-password", authController.forgotPassword);
 
-export default router
+export default router;

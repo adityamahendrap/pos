@@ -1,17 +1,27 @@
 import { Request, Response, NextFunction } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
-import IOrder from '../interfaces/IOrder';
 import IOrdersProducts from '../interfaces/IOrdersProducts';
+import logger from '../utils/logger';
+import randomstring from 'randomstring';
+import pagination from '../utils/pagination';
 const prisma = new PrismaClient();
 
 export default {
   fetch: async (req: Request, res: Response, next: NextFunction) => {
+    const { limit, skip } = req.query
+    
     try {
-      const orders = await prisma.order.findMany({})
-      const count: number = orders.length
+      const orders = await prisma.order.findMany({
+        select: selectFetch,
+        ...pagination.prisma(limit as string, skip as string)
+      })
+      const data = {
+        ...pagination.meta(orders.length, limit as string, skip as string),
+        orders
+      }
 
-      console.log("User accessed orders");
-      return res.status(200).send({ message: "orders retrieved successfully", count, data: orders})
+      logger.info("User accessed orders");
+      return res.status(200).send({ message: "Orders retrieved successfully", data})
     } catch (err) {
       console.log(err);
     }
@@ -21,50 +31,26 @@ export default {
     const { id } = req.params
     
     try {
-      const order = await prisma.order.findUnique({
+      let order = await prisma.order.findUnique({
         where: { id },
-        include: { 
-          OrdersProducts: { 
-            include: { 
-              product: true 
-            } 
-          } 
-        },
-      });
-      
-      if (!order) {
-        return res.status(404).send({ message: `Order not found` });
+        select: selectDetail
+      })
+      const orderFormat = {
+        products: order.OrdersProducts,
+        ...order
       }
-      
-      const { id: orderId, name, totalPrice, totalPaid, totalReturn, receiptCode, OrdersProducts } = order;
-      
-      const products = OrdersProducts.map((orderProduct) => {
-        const { id: productId, quantity } = orderProduct;
-        const { id, sku, name, stock, price, categoryId, image } = orderProduct.product;
-        return { id, name, price, quantity };
-      });
-      
-      const detailOrder = {
-        orderId,
-        name,
-        totalPrice,
-        totalPaid,
-        totalReturn,
-        receiptCode,
-        products,
-      };
 
-      console.log("User accessed order");
-      return res.status(200).send({ message: "Order retrieved successfully", data: detailOrder})
+      logger.info("User accessed order");
+      return res.status(200).send({ message: "Order retrieved successfully", data: orderFormat})
     } catch (err) {
       console.log(err);
     }
   },
 
   create: async (req: Request, res: Response, next: NextFunction) => {
+    const { userId, paymentId, name, products, totalPaid } = req.body;
+    
     try {
-      const { userId, paymentId, name, products, receiptCode, totalPaid, totalPrice } = req.body;
-  
       let overallTotalPrice: number = 0;
       const orderProducts: IOrdersProducts[] = await Promise.all(
         products.map(async (product) => {
@@ -99,6 +85,8 @@ export default {
         return res.status(400).send({ message: "Insufficient payment amount"})
       }
       const totalReturn: number = totalPaid - overallTotalPrice
+      const receiptCode: string = randomstring.generate({ charset: 'numeric' })
+      logger.info(receiptCode);
   
       const createdOrder = await prisma.order.create({
         data: {
@@ -109,7 +97,7 @@ export default {
           totalPaid,
           totalReturn,
           receiptCode,
-          OrdersProducts: {
+          products: {
             create: orderProducts,
           },
         },
@@ -129,8 +117,8 @@ export default {
         });
       });
   
-      console.log('User created a order');
-      res.status(201).send({ message: "Order created"})
+      logger.info('User created a order');
+      return res.status(201).send({ message: "Order created"})
     } catch (err) {
       console.log(err);
     }
@@ -141,6 +129,10 @@ export default {
 
     try {
       const order = await prisma.order.findUnique({ where: { id } })
+      if(!order) {
+        return res.status(404).send({ message: "Order not found" })
+      }
+
       const ordersProducts = await prisma.orderProduct.findMany({ where: { orderId: order.id }})
       const productIds = ordersProducts.map((orderProduct) => orderProduct.productId); 
       const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
@@ -170,7 +162,7 @@ export default {
       //   })
       // });
 
-      console.log("User canceled order");
+      logger.info("User canceled order");
       return res.status(200).send({ message: "Order canceled" })
     } catch (err) {
       console.log(err);
@@ -181,10 +173,9 @@ export default {
     const { id } = req.params
     
     try {
-      await prisma.order.delete({
-        where: { id }
-      })
-      console.log("User deleted order");
+      await prisma.order.delete({ where: { id } })
+      
+      logger.info("User deleted order");
       return res.status(200).send({ message: "Order deleted successfully" })
     } catch (err) {
       if(err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -195,4 +186,45 @@ export default {
       console.log(err);
     }
   }
+}
+
+const selectFetch = {
+  id: true,
+  name: true,
+  userId: true,
+  payment: {
+    select: {
+      id: true,
+      name: true,
+      type: true
+    }
+  },
+  totalPrice: true,
+  totalPaid: true,
+  totalReturn: true,
+  receiptCode: true
+}
+
+const selectDetail = {
+  id: true,
+  name: true,
+  userId: true,
+  payment: {
+    select: {
+      id: true,
+      name: true,
+      type: true
+    }
+  },
+  OrdersProducts: {
+    select: {
+      productId: true,
+      totalPrice: true,
+      quantity: true
+    }
+  },
+  totalPrice: true,
+  totalPaid: true,
+  totalReturn: true,
+  receiptCode: true
 }
