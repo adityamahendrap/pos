@@ -24,7 +24,7 @@ export default {
       setCache(req, next, data)
       return res.status(200).send({ message: "Products retrieved successfully", data})
     } catch (err) {
-      console.log(err);
+      next(err);
     }
   },
 
@@ -44,7 +44,7 @@ export default {
       setCache(req, next, product)
       return res.status(200).send({ message: "product retrieved successfully", data: product})
     } catch (err) {
-      console.log(err);
+      next(err);
     }
   },
 
@@ -59,7 +59,7 @@ export default {
       logger.info('User created a product');
       return res.status(201).send({ message: "product created"})
     } catch (err) {
-      console.log(err);
+      next(err);
     }
   },
 
@@ -81,7 +81,7 @@ export default {
           return res.status(404).send({ message: "product not found"})
         }
       }
-      console.log(err);
+      next(err);
     }
   },
 
@@ -102,7 +102,7 @@ export default {
           return res.status(409).send({ message: "Foreign key constraint failed"})
         }
       }
-      console.log(err);
+      next(err);
     }
   }
 }

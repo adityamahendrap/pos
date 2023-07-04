@@ -24,7 +24,7 @@ export default {
       setCache(req, next, data)
       return res.status(200).send({ message: "Orders retrieved successfully", data})
     } catch (err) {
-      console.log(err);
+      next(err);
     }
   },
 
@@ -36,16 +36,17 @@ export default {
         where: { id },
         select: selectDetail
       })
+      const { OrdersProducts, ...data } = order 
       const orderFormat = {
-        products: order.OrdersProducts,
-        ...order
+        ...data,
+        products: OrdersProducts
       }
 
       logger.info("User accessed order");
       setCache(req, next, orderFormat)
       return res.status(200).send({ message: "Order retrieved successfully", data: orderFormat})
     } catch (err) {
-      console.log(err);
+      next(err);
     }
   },
 
@@ -88,41 +89,42 @@ export default {
       }
       const totalReturn: number = totalPaid - overallTotalPrice
       const receiptCode: string = randomstring.generate({ charset: 'numeric' })
-      logger.info(receiptCode);
   
-      const createdOrder = await prisma.order.create({
-        data: {
-          userId,
-          paymentId,
-          name,
-          totalPrice: overallTotalPrice,
-          totalPaid,
-          totalReturn,
-          receiptCode,
-          products: {
-            create: orderProducts,
+      await prisma.$transaction(async tx => {
+        const createdOrder = await prisma.order.create({
+          data: {
+            userId,
+            paymentId,
+            name,
+            totalPrice: overallTotalPrice,
+            totalPaid,
+            totalReturn,
+            receiptCode,
+            products: {
+              create: orderProducts,
+            },
           },
-        },
-      });
+        });
 
-      products.forEach(async (product) => {
-        const { productId, quantity } = product;
-        const fetchedProduct = await prisma.product.findUnique({
-          where: { id: productId },
-          select: { stock: true },
+        products.forEach(async (product) => {
+          const { productId, quantity } = product;
+          const fetchedProduct = await prisma.product.findUnique({
+            where: { id: productId },
+            select: { stock: true },
+          });
+          
+          const { stock } = fetchedProduct;      
+          const updatedProduct = await prisma.product.update({
+            where: { id: productId },
+            data: { stock: stock - quantity },
+          });
         });
-      
-        const { stock } = fetchedProduct;      
-        const updatedProduct = await prisma.product.update({
-          where: { id: productId },
-          data: { stock: stock - quantity },
-        });
-      });
-  
+      })
+
       logger.info('User created a order');
       return res.status(201).send({ message: "Order created"})
     } catch (err) {
-      console.log(err);
+      next(err);
     }
   },
 
@@ -138,36 +140,27 @@ export default {
       const ordersProducts = await prisma.orderProduct.findMany({ where: { orderId: order.id }})
       const productIds = ordersProducts.map((orderProduct) => orderProduct.productId); 
       const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+      
+      await prisma.$transaction(async tx => {
+        const restoreStock = await Promise.all(
+          products.map(async (product) => {
+            const orderProduct = ordersProducts.find((orderProduct) => orderProduct.productId === product.id);
+            const quantity = orderProduct.quantity;
+            const stock = product.stock;
 
-      const restoreStock = await Promise.all(
-        products.map(async (product) => {
-          const orderProduct = ordersProducts.find((orderProduct) => orderProduct.productId === product.id);
-          const quantity = orderProduct.quantity;
-          const stock = product.stock;
-
-          await prisma.product.update({
-            where: { id: product.id },
-            data: { stock: stock + quantity },
-          });
-        })
-      )
-      await prisma.order.delete({ where: { id } })
-
-      // ordersProducts.forEach(async (orderProduct) => {
-      //   const { productId, quantity } = orderProduct
-      //   const product = await prisma.product.findUnique({ where: { id: productId } })
-      //   const { stock } = product
-
-      //   const restoreStock = prisma.product.update({
-      //     where: { id: productId },
-      //     data: { stock:  stock + quantity}
-      //   })
-      // });
+            await prisma.product.update({
+              where: { id: product.id },
+              data: { stock: stock + quantity },
+            });
+          })
+        )
+        await prisma.order.delete({ where: { id } })
+      })
 
       logger.info("User canceled order");
       return res.status(200).send({ message: "Order canceled" })
     } catch (err) {
-      console.log(err);
+      next(err);
     }
   },
 
@@ -185,7 +178,7 @@ export default {
           return res.status(404).send({ message: "Order not found"})
         }
       }
-      console.log(err);
+      next(err);
     }
   }
 }

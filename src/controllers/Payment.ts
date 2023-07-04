@@ -22,7 +22,7 @@ export default {
       setCache(req, next, data)
       return res.status(200).send({ message: "Payments retrieved successfully", data})
     } catch (err) {
-      console.log(err);
+      next(err);
     }
   },
 
@@ -39,7 +39,7 @@ export default {
       setCache(req, next, payment)
       return res.status(200).send({ message: "Payment retrieved successfully", data: payment})
     } catch (err) {
-      console.log(err);
+      next(err);
     }
   },
 
@@ -54,7 +54,7 @@ export default {
       logger.info('User created a payment');
       return res.status(201).send({ message: "Payment created"})
     } catch (err) {
-      console.log(err);
+      next(err);
     }
   },
 
@@ -76,7 +76,7 @@ export default {
           return res.status(404).send({ message: "Payment not found"})
         }
       }
-      console.log(err);
+      next(err);
     }
   },
 
@@ -97,7 +97,7 @@ export default {
           return res.status(409).send({ message: "Foreign key constraint failed"})
         }
       }
-      console.log(err);
+      next(err);
     }
   }
 }
