@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
 import logger from '../utils/logger';
+import setCache from "../utils/setCache";
 import pagination from '../utils/pagination';
 const prisma = new PrismaClient();
 
@@ -20,6 +21,7 @@ export default {
       }
       
       logger.info("User accessed products");
+      setCache(req, next, data)
       return res.status(200).send({ message: "Products retrieved successfully", data})
     } catch (err) {
       console.log(err);
@@ -39,6 +41,7 @@ export default {
       }
 
       logger.info("User accessed product");
+      setCache(req, next, product)
       return res.status(200).send({ message: "product retrieved successfully", data: product})
     } catch (err) {
       console.log(err);

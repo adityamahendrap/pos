@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
-import IOrdersProducts from '../interfaces/IOrdersProducts';
 import logger from '../utils/logger';
 import randomstring from 'randomstring';
+import setCache from "../utils/setCache";
 import pagination from '../utils/pagination';
 const prisma = new PrismaClient();
 
@@ -21,6 +21,7 @@ export default {
       }
 
       logger.info("User accessed orders");
+      setCache(req, next, data)
       return res.status(200).send({ message: "Orders retrieved successfully", data})
     } catch (err) {
       console.log(err);
@@ -41,6 +42,7 @@ export default {
       }
 
       logger.info("User accessed order");
+      setCache(req, next, orderFormat)
       return res.status(200).send({ message: "Order retrieved successfully", data: orderFormat})
     } catch (err) {
       console.log(err);
@@ -52,7 +54,7 @@ export default {
     
     try {
       let overallTotalPrice: number = 0;
-      const orderProducts: IOrdersProducts[] = await Promise.all(
+      const orderProducts = await Promise.all(
         products.map(async (product) => {
           const { productId, quantity } = product;
           const fetchedProduct = await prisma.product.findUnique({

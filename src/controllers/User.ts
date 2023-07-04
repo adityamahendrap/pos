@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
 import logger from '../utils/logger';
+import setCache from "../utils/setCache";
 import pagination from '../utils/pagination';
 const prisma = new PrismaClient();
 
@@ -17,8 +18,9 @@ export default {
         ...pagination.meta(users.length, limit as string, skip as string),
         users
       }
-
+      
       logger.info("User accessed users");
+      setCache(req, next, data)
       return res.status(200).send({ message: "Users retrieved successfully", data})
     } catch (err) {
       next(err)
@@ -35,6 +37,7 @@ export default {
       }
 
       logger.info("User accessed user");
+      setCache(req, next, user)
       return res.status(200).send({ message: "User retrieved successfully", data: user })
     } catch (err) {
       next(err)

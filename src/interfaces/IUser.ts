@@ -1,7 +1,8 @@
 export default interface IUser {
+  id: string
   name: string,
   email: string,
   password: string,
-  role: "ADMIN" | "CUSTOMER"
-  isVerify: boolean 
+  role: "CUSTOMER" | "ADMIN",
+  isVerify: boolean
 }
